@@ -1,127 +1,219 @@
 import { FaceMesh } from "@mediapipe/face_mesh";
-import React, { useRef, useEffect } from "react";
-import * as Facemesh from "@mediapipe/face_mesh";
+import Box from '@mui/material/Box';
+import React, { useRef, useEffect, useState } from "react";
+import * as FaceDetection from "@mediapipe/face_detection";
 import * as cam from "@mediapipe/camera_utils";
 import Webcam from "react-webcam";
+import Grid from '@mui/material/Grid';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormControl from '@mui/material/FormControl';
+import FormLabel from '@mui/material/FormLabel'
+import Countdown from 'react-countdown';
+import Modal from '@mui/material/Modal';
+const mockExamData = [
+  {
+    question: "Question 1",
+    options: [{ label: 'ans1', value: 'ans1' }, { label: 'ans1', value: 'ans1' }, { label: 'ans1', value: 'ans1' }]
+  },
+  {
+    question: "Question 2",
+    options: [{ label: 'ans1', value: 'ans1' }, { label: 'ans1', value: 'ans1' }, { label: 'ans1', value: 'ans1' }]
+  },
+  {
+    question: "Question 3",
+    options: [{ label: 'ans1', value: 'ans1' }, { label: 'ans1', value: 'ans1' }, { label: 'ans1', value: 'ans1' }]
+  },
+  {
+    question: "Question 4 ",
+    options: [{ label: 'ans1', value: 'ans1' }, { label: 'ans1', value: 'ans1' }, { label: 'ans1', value: 'ans1' }]
+  }
+]
+const mockExamTime = 20000;
+const style = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: 400,
+  bgcolor: 'background.paper',
+  border: '2px solid #000',
+  boxShadow: 24,
+  p: 4,
+};
+
 function App() {
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
+  const [timeOver, setTimeOver] = useState(true)
+  const [testSubmitted, setTestSubmitted] = useState(false)
+  const [testStartCounter, setTestStartCounter] = useState(0)
+  const [testStarted, setTestStarted] = useState(false);
+  const [multipleFacesDetected, setMultipleFacesDetected] = useState(false)
+  const [abort, setAbort] = useState(false)
+  const [emptyAreaWarningCount, setEmptyAreaWarningCount] = useState(0);
+  const [emptyArea, setEmptyArea] = useState(false)
+  const handleClose = () => {
+    setMultipleFacesDetected(false);
+    setAbort(true)
+  }
+  const handleCloseWarning=()=>{
+    setEmptyArea(false)
+    if(emptyAreaWarningCount>0) setAbort(true)
+  }
   const connect = window.drawConnectors;
   var camera = null;
   function onResults(results) {
-    // const video = webcamRef.current.video;
-    const videoWidth = webcamRef.current.video.videoWidth;
-    const videoHeight = webcamRef.current.video.videoHeight;
-
-    // Set canvas width
-    canvasRef.current.width = videoWidth;
-    canvasRef.current.height = videoHeight;
-
-    const canvasElement = canvasRef.current;
-    const canvasCtx = canvasElement.getContext("2d");
-    canvasCtx.save();
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-    canvasCtx.drawImage(
-      results.image,
-      0,
-      0,
-      canvasElement.width,
-      canvasElement.height
-    );
-    if (results.multiFaceLandmarks) {
-      for (const landmarks of results.multiFaceLandmarks) {
-        connect(canvasCtx, landmarks, Facemesh.FACEMESH_TESSELATION, {
-          color: "#C0C0C070",
-          lineWidth: 1,
-        });
-        connect(canvasCtx, landmarks, Facemesh.FACEMESH_RIGHT_EYE, {
-          color: "#FF3030",
-        });
-        connect(canvasCtx, landmarks, Facemesh.FACEMESH_RIGHT_EYEBROW, {
-          color: "#FF3030",
-        });
-        connect(canvasCtx, landmarks, Facemesh.FACEMESH_LEFT_EYE, {
-          color: "#30FF30",
-        });
-        connect(canvasCtx, landmarks, Facemesh.FACEMESH_LEFT_EYEBROW, {
-          color: "#30FF30",
-        });
-        connect(canvasCtx, landmarks, Facemesh.FACEMESH_FACE_OVAL, {
-          color: "#E0E0E0",
-        });
-        connect(canvasCtx, landmarks, Facemesh.FACEMESH_LIPS, {
-          color: "#E0E0E0",
-        });
-      }
+    console.log(results.detections);
+    if (results.detections.length == 0) {
+      console.log(emptyAreaWarningCount);
+      let count = emptyAreaWarningCount;
+      setEmptyAreaWarningCount(count=+1);
+      setEmptyArea(true);
     }
-    canvasCtx.restore();
+    if (results.detections.length > 1) {
+      setMultipleFacesDetected(true)
+      console.log("More tan 1 ===>", results.detections.length, results);
+    }
   }
-  // }
 
-  // setInterval(())
   useEffect(() => {
-    const faceMesh = new FaceMesh({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-      },
-    });
+    if (!abort) {
+      const faceDetection = new FaceDetection.FaceDetection({
+        locateFile: (file) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4/${file}`;
+        }
+      });
+      faceDetection.setOptions({
+        model: 'short',
+        minDetectionConfidence: 0.5
+      });
+      faceDetection.onResults(onResults);
 
-    faceMesh.setOptions({
-      maxNumFaces: 1,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
-
-    faceMesh.onResults(onResults);
-
-    if (
-      typeof webcamRef.current !== "undefined" &&
-      webcamRef.current !== null
-    ) {
       camera = new cam.Camera(webcamRef.current.video, {
         onFrame: async () => {
-          await faceMesh.send({ image: webcamRef.current.video });
+          await faceDetection.send({ image: webcamRef.current.video });
         },
-        width: 640,
-        height: 480,
+        width: 300,
+        height: 300
       });
       camera.start();
     }
-  }, []);
+
+  }, [abort]);
+  const onExamOver = () => {
+    console.log("Exam is over");
+  }
+  const onTestSubmit = () => {
+    setTestSubmitted(true)
+  }
+  const onTestStart = () => {
+    let temp = testStartCounter
+    setTimeOver(false)
+    setTestStarted(true)
+    setTestStartCounter(++temp)
+  }
+  if (abort) {
+    return (
+      <Grid container direction='column'>
+        <Grid item>
+          <Typography id="modal-modal-title" variant="h6" component="h2">
+            You have violated Guidelines of the exam
+          </Typography>
+        </Grid>
+        <Grid item>
+          <Typography id="modal-modal-description" variant="h6" component="h2">
+            Contact Your Admin to resolve.
+          </Typography>
+        </Grid>
+      </Grid>
+    )
+  }
   return (
-    <center>
-      <div className="App">
+    <Grid container spacing={2} direction='column'>
+      <Modal
+        open={multipleFacesDetected}
+        onClose={handleClose}
+        aria-labelledby="modal-modal-title"
+        aria-describedby="modal-modal-description"
+      >
+        <Box sx={style}>
+          <Typography id="modal-modal-title" variant="h6" component="h2">
+            Multiple Faces Detected
+          </Typography>
+          <Typography id="modal-modal-description" sx={{ mt: 2 }}>
+            Contact Your Admin to resolve.
+          </Typography>
+        </Box>
+      </Modal>
+      <Modal
+        open={emptyArea}
+        onClose={handleCloseWarning}
+        aria-labelledby="modal-modal-title"
+        aria-describedby="modal-modal-description"
+      >
+        <Box sx={style}>
+          <Typography id="modal-modal-title" variant="h6" component="h2">
+           Area is Empty . Warning number ${emptyAreaWarningCount}. Will be terminated in next warning
+          </Typography>
+          <Typography id="modal-modal-description" sx={{ mt: 2 }}>
+           Please sit intact in front of PC to avoid termination
+          </Typography>
+        </Box>
+      </Modal>
+      <Grid item>
+        <Countdown date={Date.now() + mockExamTime} onComplete={onExamOver} />,
+      </Grid>
+      <Grid item >
         <Webcam
           ref={webcamRef}
           style={{
-            position: "absolute",
             marginLeft: "auto",
             marginRight: "auto",
             left: 0,
             right: 0,
             textAlign: "center",
-            zindex: 9,
-            width: 640,
-            height: 480,
+            width: 300,
+            height: 300,
           }}
-        />{" "}
-        <canvas
-          ref={canvasRef}
-          className="output_canvas"
-          style={{
-            position: "absolute",
-            marginLeft: "auto",
-            marginRight: "auto",
-            left: 0,
-            right: 0,
-            textAlign: "center",
-            zindex: 9,
-            width: 640,
-            height: 480,
-          }}
-        ></canvas>
-      </div>
-    </center>
+        />
+
+      </Grid>
+      <Grid item>
+        <Button variant="contained" size="medium" onClick={onTestStart}>
+          Start Exam
+        </Button>
+      </Grid>
+      {testSubmitted && <Typography> You have already Submitted your exam</Typography>}
+      {timeOver && <Typography> Assignment Time is over. Please contact your admin</Typography>}
+      {
+        !timeOver && !testSubmitted && mockExamData.map((data, index) => {
+          return (
+            <Grid item key={`${index}${data.question}`}>
+              <FormControl>
+                <FormLabel id="demo-radio-buttons-group-label">{data.question}</FormLabel>
+                <RadioGroup
+                  aria-labelledby="demo-radio-buttons-group-label"
+                  name="radio-buttons-group"
+                >
+                  <FormControlLabel value={data.options[0].value} control={<Radio />} label={data.options[0].label} />
+                  <FormControlLabel value={data.options[0].value} control={<Radio />} label={data.options[0].label} />
+                  <FormControlLabel value={data.options[0].value} control={<Radio />} label={data.options[0].label} />
+                </RadioGroup>
+              </FormControl>
+
+            </Grid>
+          )
+        })
+      }
+      {!testSubmitted && testStarted && <Button variant="contained" size="medium" onClick={onTestSubmit}>
+        Submit
+      </Button>}
+
+    </Grid>
   );
 }
 
